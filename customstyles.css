@@ -63,9 +63,5 @@ h2 {
     background: red;
 }
 
-  th:nth-child(7), td:nth-child(7) {
-    color: black;
-    background: red;
-}
 /* This formats the color of the tables. */
 }
