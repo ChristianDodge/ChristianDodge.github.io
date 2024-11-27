@@ -1,0 +1,414 @@
+<!--
+File: hw4.html
+GUI Assignment: Creating an Interactive Dynamic Multiplication Table with Sliders and Tabs
+Christian Dodge
+
+This html file is for generating a multiplication table based on user input. The user defines the dimensions of the table.
+It uses CSS, HTML, JavaScript, and jQuery. The error messages changing the slider size makes it more noticable by the user
+too, so it is a feature rather than a bug/error in the program.
+
+Changelog:
+11/26/2024: Created by CD, created the basis of all the code neeeded.
+11/27/2024: Updated everything to meet the requirements.
+
+Image Source(s):
+N/A.
+
+Other Source(s):
+N/A.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>jQuery Multiplication Table Generator</title>
+    
+    <!-- Include jQuery libraries for UI interactions, tabs, and form validation. -->
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.3/jquery.validate.min.js"></script>
+    
+    <style>
+        /* Styling. */
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .form-container {
+            background-color: #f4f4f4;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .slider-input-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .slider {
+            flex-grow: 1;
+            margin-right: 10px;
+        }
+
+        .slider-value-input {
+            width: 60px;
+        }
+
+        .multiplication-table {
+            border-collapse: collapse;
+            margin: 0 auto;
+        }
+
+        .multiplication-table th, 
+        .multiplication-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+
+        .multiplication-table th {
+            background-color: #f2f2f2;
+        }
+
+        .error {
+            color: red;
+            font-size: 0.8em;
+        }
+
+        input.error {
+            border: 2px solid red;
+        }
+
+        #dynamicTableContainer,
+        .table-container {
+            max-height: 400px;
+            overflow-x: auto;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            margin-top: 15px;
+        }
+
+        .delete-tabs-container {
+            margin-top: 15px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>jQuery Multiplication Table Generator</h1>
+
+    <!-- Tabs container for input and generated tables. -->
+    <div id="tabs">
+        <ul>
+            <li><a href="#input-tab">Input Parameters</a></li>
+        </ul>
+
+        <!-- Input Parameters Tab. -->
+        <div id="input-tab">
+            <div class="form-container">
+                <form id="tableForm">
+                    <!-- Start Row input with slider and number input. -->
+                    <div class="form-group">
+                        <label for="startRowValue">Start Row:</label>
+                        <div class="slider-input-container">
+                            <div id="startRowSlider" class="slider"></div>
+                            <input type="number" id="startRowValue" name="startRowValue" 
+                                   class="slider-value-input" min="-50" max="50" step="1" required>
+                        </div>
+                    </div>
+
+                    <!-- End Row input with slider and number input. -->
+                    <div class="form-group">
+                        <label for="endRowValue">End Row:</label>
+                        <div class="slider-input-container">
+                            <div id="endRowSlider" class="slider"></div>
+                            <input type="number" id="endRowValue" name="endRowValue" 
+                                   class="slider-value-input" min="-50" max="50" step="1" required>
+                        </div>
+                    </div>
+
+                    <!-- Start Column input with slider and number input. -->
+                    <div class="form-group">
+                        <label for="startColValue">Start Column:</label>
+                        <div class="slider-input-container">
+                            <div id="startColSlider" class="slider"></div>
+                            <input type="number" id="startColValue" name="startColValue" 
+                                   class="slider-value-input" min="-50" max="50" step="1" required>
+                        </div>
+                    </div>
+
+                    <!-- End Column input with slider and number input. -->
+                    <div class="form-group">
+                        <label for="endColValue">End Column:</label>
+                        <div class="slider-input-container">
+                            <div id="endColSlider" class="slider"></div>
+                            <input type="number" id="endColValue" name="endColValue" 
+                                   class="slider-value-input" min="-50" max="50" step="1" required>
+                        </div>
+                    </div>
+
+                    <!-- Container for a dynamically generated multiplication table. -->
+                    <div id="dynamicTableContainer"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Buttons for doing what they are titled. -->
+    <div class="delete-tabs-container">
+        <button id="calculateNewTab">Calculate in New Tab</button>
+        <button id="deleteSelectedTabs">Delete Selected Tabs</button>
+    </div>
+
+    <script>
+    $(document).ready(function() {
+        // Initialize jQuery UI tabs.
+        $("#tabs").tabs({
+            heightStyle: "content"
+        });
+
+        // Validation methods.
+        $.validator.addMethod("rowColumnRange", function(value, element, params) {
+            const min = parseInt(params[0]);
+            const max = parseInt(params[1]);
+            return this.optional(element) || (value >= min && value <= max);
+        }, "Value must be between -50 and 50");
+
+        $.validator.addMethod("rowColumnOrder", function(value, element, params) {
+            const startValue = parseInt($("#" + params[0]).val());
+            const endValue = parseInt(value);
+            return this.optional(element) || startValue <= endValue;
+        }, "Start value must be less than or equal to end value");
+
+        // Form validation configuration.
+        const formValidator = $("#tableForm").validate({
+            errorClass: "error",
+            errorElement: "div",
+            rules: {
+                startRowValue: {
+                    required: true,
+                    rowColumnRange: [-50, 50],
+                    number: true
+                },
+                endRowValue: {
+                    required: true,
+                    rowColumnRange: [-50, 50],
+                    number: true,
+                    rowColumnOrder: ["startRowValue"]
+                },
+                startColValue: {
+                    required: true,
+                    rowColumnRange: [-50, 50],
+                    number: true
+                },
+                endColValue: {
+                    required: true,
+                    rowColumnRange: [-50, 50],
+                    number: true,
+                    rowColumnOrder: ["startColValue"]
+                }
+            },
+            messages: {
+                startRowValue: {
+                    required: "Start row is required",
+                    number: "Please enter a valid number",
+                    rowColumnRange: "Start row must be between -50 and 50"
+                },
+                endRowValue: {
+                    required: "End row is required",
+                    number: "Please enter a valid number",
+                    rowColumnRange: "End row must be between -50 and 50",
+                    rowColumnOrder: "Start row must be less than or equal to end row"
+                },
+                startColValue: {
+                    required: "Start column is required",
+                    number: "Please enter a valid number",
+                    rowColumnRange: "Start column must be between -50 and 50"
+                },
+                endColValue: {
+                    required: "End column is required",
+                    number: "Please enter a valid number",
+                    rowColumnRange: "End column must be between -50 and 50",
+                    rowColumnOrder: "Start column must be less than or equal to end column"
+                }
+            },
+            // Triggers the table generation only when form is valid.
+            submitHandler: function() {
+                generateDynamicTable();
+                return false;
+            }
+        });
+
+        // Configurations the jQuery UI sliders.
+        const sliderConfig = {
+            min: -50,           // Minimum slider value
+            max: 50,             // Maximum slider value
+            step: 1,             // Increment/decrement step
+            create: function(event, ui) {
+                // Initialize slider's text input with current value when created.
+                const valueInput = $(this).siblings('.slider-value-input');
+                const initialValue = $(this).slider('value');
+                valueInput.val(initialValue);
+            },
+            slide: function(event, ui) {
+                // Updates the text input when slider moves and regenerate table.
+                const valueInput = $(this).siblings('.slider-value-input');
+                valueInput.val(ui.value);
+                
+                // Validates the form and generates the table if valid.
+                if ($("#tableForm").valid()) {
+                    generateDynamicTable();
+                }
+            }
+        };
+
+        // Initializes sliders for each input with default values (-5 to 5 for rows/columns).
+        const $startRowSlider = $('#startRowSlider').slider(Object.assign({}, sliderConfig, { value: -5 }));
+        const $endRowSlider = $('#endRowSlider').slider(Object.assign({}, sliderConfig, { value: 5 }));
+        const $startColSlider = $('#startColSlider').slider(Object.assign({}, sliderConfig, { value: -5 }));
+        const $endColSlider = $('#endColSlider').slider(Object.assign({}, sliderConfig, { value: 5 }));
+
+        // Event handler for manual number input changes.
+        $('.slider-value-input').on('change', function() {
+            const $this = $(this);
+            const value = parseInt($this.val());
+            const $slider = $this.siblings('.slider');
+            
+            // Validates and corrects input if out of range.
+            if (isNaN(value) || value < -50 || value > 50) {
+                $this.val($slider.slider('value'));
+                return;
+            }
+
+            // Updates slider's value.
+            $slider.slider('value', value);
+            
+            // If valid, generates a table if valid.
+            if ($("#tableForm").valid()) {
+                generateDynamicTable();
+            }
+        });
+
+        // Generates a dynamic multiplication table based on the inputted values.
+        // Validates inputs and updates the table in the input tab.
+        function generateDynamicTable() {
+            // Gets the current input values.
+            const startRow = parseInt($('#startRowValue').val());
+            const endRow = parseInt($('#endRowValue').val());
+            const startCol = parseInt($('#startColValue').val());
+            const endCol = parseInt($('#endColValue').val());
+
+            // Generates the table (HTML) with nested loops.
+            let tableHTML = '<table class="multiplication-table">';
+            tableHTML += '<tr><th></th>';
+            
+            // Creates the column headers.
+            for (let j = startCol; j <= endCol; j++) {
+                tableHTML += `<th>${j}</th>`;
+            }
+            tableHTML += '</tr>';
+
+            // Generates the table rows.
+            for (let i = startRow; i <= endRow; i++) {
+                tableHTML += '<tr>';
+                tableHTML += `<th>${i}</th>`;
+                for (let j = startCol; j <= endCol; j++) {
+                    tableHTML += `<td>${i * j}</td>`;
+                }
+                tableHTML += '</tr>';
+            }
+            tableHTML += '</table>';
+
+            // Updates the dynamic table container.
+            $('#dynamicTableContainer').html(tableHTML);
+        }
+
+        // Event handler for "Calculate in New Tab" button.
+        $("#calculateNewTab").on("click", function() {
+            // Checks if the form is valid before creating a new tab.
+            if (!$("#tableForm").valid()) {
+                return;
+            }
+
+            // Gets current inputted values.
+            const startRow = parseInt($('#startRowValue').val());
+            const endRow = parseInt($('#endRowValue').val());
+            const startCol = parseInt($('#startColValue').val());
+            const endCol = parseInt($('#endColValue').val());
+
+            // Generates the table (HTML) with nested loops.
+            let tableHTML = '<table class="multiplication-table">';
+            tableHTML += '<tr><th></th>';
+            
+            for (let j = startCol; j <= endCol; j++) {
+                tableHTML += `<th>${j}</th>`;
+            }
+            tableHTML += '</tr>';
+
+            for (let i = startRow; i <= endRow; i++) {
+                tableHTML += '<tr>';
+                tableHTML += `<th>${i}</th>`;
+                for (let j = startCol; j <= endCol; j++) {
+                    tableHTML += `<td>${i * j}</td>`;
+                }
+                tableHTML += '</tr>';
+            }
+            tableHTML += '</table>';
+
+            // Create a new tab with the values as their identifier.
+            const tabTitle = `${startRow} to ${endRow}, ${startCol} to ${endCol}`;
+            const tabId = `table-${Date.now()}`;
+
+            // Appends the new tab to the tabs list.
+            $("#tabs ul").append(`
+                <li>
+                    <input type="checkbox" class="tab-select" style="margin-right: 5px;">
+                    <a href="#${tabId}">${tabTitle}</a>
+                    <span class="ui-icon ui-icon-close ui-tabs-close" role="presentation">Remove Tab</span>
+                </li>
+            `);
+
+            // Adds the tab content with a scrollable container.
+            $("#tabs").append(`
+                <div id="${tabId}">
+                    <div class="table-container">${tableHTML}</div>
+                </div>
+            `);
+
+            // Refresh the tabs and switch to the newly created tab.
+            $("#tabs").tabs("refresh");
+            $("#tabs").tabs("option", "active", -1);
+        });
+
+        // Event handler for closing individual tabs.
+        $("#tabs").on("click", "span.ui-tabs-close", function() {
+            const panelId = $(this).closest("li").remove().attr("href");
+            $(panelId).remove();
+            $("#tabs").tabs("refresh");
+        });
+
+        // Event handler for deleting (multiple or single) selected tabs.
+        $("#deleteSelectedTabs").on("click", function() {
+            $("#tabs ul li").each(function() {
+                if ($(this).find('.tab-select').is(':checked')) {
+                    const panelId = $(this).remove().attr("href");
+                    $(panelId).remove();
+                }
+            });
+            $("#tabs").tabs("refresh");
+        });
+
+        // Generate initial table when page loads.
+        generateDynamicTable();
+    });
+    </script>
+</body>
+</html>
