@@ -1,0 +1,466 @@
+<!--
+File: HW5.html
+GUI Assignment: Implementing a Bit of Scrabble with Drag-and-Drop
+Christian Dodge (Email: Christian_Dodge@student.uml.edu)
+
+This html file is for creating a Scrabble game.
+It uses CSS, HTML, JavaScript, and jQuery. There is appropriate error checking too.
+
+Changelog:
+12/16/2024: Created by CD, created the basis of all the code neeeded.
+11/17/2024: Updated everything to meet the requirements.
+
+Image Source(s):
+- Used the provided Scrabble images (tile images, board images).
+
+Other Source(s):
+N/A.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Scrabble-like Word Game</title>
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <style>
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        #rack {
+            background-image: url('scrabble-tile-holder-406774_640.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            width: 100%;
+            height: 120px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            gap: 10px;
+            position: relative;
+        }
+        #scrabble-board {
+            width: 100%;
+            height: 120px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            gap: 10px;
+            position: relative;
+        }
+        .tile {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: move;
+            position: relative;
+            z-index: 10;
+        }
+        .tile img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .board-square {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: visible;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+        .board-square.blank-space {
+            background-image: url('blank_space.png');
+        }
+        .board-square.double-word {
+            background-image: url('doubleWord.png');
+        }
+        .board-square.double-letter {
+            background-image: url('doubleLetter.png');
+        }
+        .board-square .tile {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 20;
+        }
+        #score-display, #tiles-left-display {
+            font-size: 18px;
+            margin: 10px;
+            z-index: 30;
+            position: relative;
+        }
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 800px;
+        }
+        .button-container {
+            display: flex;
+            gap: 10px;
+            margin: 10px;
+        }
+        .ui-draggable-dragging {
+            z-index: 100;
+            transform: scale(1.1);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        #error-message {
+            color: red;
+            margin: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div class="game-info">
+            <div id="score-display">Score: <span id="current-score">0</span></div>
+            <div id="tiles-left-display">Tiles Left: <span id="tile-count">100</span></div>
+        </div>
+        <div id="error-message"></div>
+        <div id="rack"></div>
+        <div id="scrabble-board"></div>
+        <div class="button-container">
+            <button id="submit-word">Submit Word</button>
+            <button id="restart-game">Restart Game</button>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    <script>
+        // Letter distribution and point values, with an associative array.
+        const LETTER_DISTRIBUTION = {
+            'A': { count: 9, points: 1 },
+            'B': { count: 2, points: 3 },
+            'C': { count: 2, points: 3 },
+            'D': { count: 4, points: 2 },
+            'E': { count: 12, points: 1 },
+            'F': { count: 2, points: 4 },
+            'G': { count: 3, points: 2 },
+            'H': { count: 2, points: 4 },
+            'I': { count: 9, points: 1 },
+            'J': { count: 1, points: 8 },
+            'K': { count: 1, points: 5 },
+            'L': { count: 4, points: 1 },
+            'M': { count: 2, points: 3 },
+            'N': { count: 6, points: 1 },
+            'O': { count: 8, points: 1 },
+            'P': { count: 2, points: 3 },
+            'Q': { count: 1, points: 10 },
+            'R': { count: 6, points: 1 },
+            'S': { count: 4, points: 1 },
+            'T': { count: 6, points: 1 },
+            'U': { count: 4, points: 1 },
+            'V': { count: 2, points: 4 },
+            'W': { count: 2, points: 4 },
+            'X': { count: 1, points: 8 },
+            'Y': { count: 2, points: 4 },
+            'Z': { count: 1, points: 10 },
+            'BLANK': { count: 2, points: 0 }
+        };
+
+        class ScrabbleGame {
+            constructor() {
+                this.score = 0;
+                this.letterBag = this.initializeLetterBag();
+                this.rack = [];
+                this.boardLetters = [];
+                this.initializeGame();
+            }
+
+            initializeLetterBag() {
+                const bag = [];
+                Object.entries(LETTER_DISTRIBUTION).forEach(([letter, details]) => {
+                    for (let i = 0; i < details.count; i++) {
+                        bag.push(letter);
+                    }
+                });
+                return this.shuffleArray(bag);
+            }
+
+            shuffleArray(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+                return array;
+            }
+
+            drawTiles(numTiles) {
+                // Makes sure you cannot draw more tiles than available in Scrabble.
+                numTiles = Math.min(numTiles, this.letterBag.length);
+                const drawnTiles = this.letterBag.splice(0, numTiles);
+                
+                // Updates the tile count display.
+                $('#tile-count').text(this.letterBag.length);
+                
+                return drawnTiles;
+            }
+
+            initializeGame() {
+                // Creates the rack.
+                const rack = $('#rack');
+                rack.empty();
+
+                // Draws the initial 7 tiles.
+                const initialTiles = this.drawTiles(7);
+                initialTiles.forEach(letter => this.createTile(letter, rack));
+
+                // Create the Scrabble board row.
+                this.createBoardRow();
+
+                // Sets up the event handlers.
+                this.setupDragAndDrop();
+                this.setupButtonHandlers();
+
+                // Initial tile count display.
+                $('#tile-count').text(this.letterBag.length);
+            }
+
+            createTile(letter, container) {
+                // Generate image path for the tiles.
+                const imagePath = letter === 'BLANK' 
+                    ? 'Scrabble_Tile_Blank.jpg' 
+                    : `Scrabble_Tile_${letter}.jpg`;
+
+                const tile = $('<div>')
+                    .addClass('tile')
+                    .data('letter', letter)
+                    .draggable({
+                        revert: 'invalid',
+                        containment: 'document',
+                        cursor: 'move',
+                        start: function() {
+                            $(this).css('z-index', 100);
+                        },
+                        stop: function() {
+                            $(this).css('z-index', 10);
+                        }
+                    });
+
+                // Creates the image element.
+                const tileImage = $('<img>')
+                    .attr('src', imagePath)
+                    .attr('alt', `Tile ${letter}`);
+
+                tile.append(tileImage);
+                container.append(tile);
+                return tile;
+            }
+
+            createBoardRow() {
+                const board = $('#scrabble-board');
+                board.empty();
+                
+                // Creates the Scrabble board layout with different tile types.
+                const boardLayout = [
+                    'blank-space', 
+                    'double-letter', 
+                    'blank-space', 
+                    'double-word', 
+                    'blank-space', 
+                    'double-letter', 
+                    'blank-space'
+                ];
+                
+                // Create board squares with specific backgrounds corresponding to
+                // the correct tile.
+                boardLayout.forEach(type => {
+                    const square = $('<div>')
+                        .addClass('board-square')
+                        .addClass(type)
+                        .droppable({
+                            accept: '.tile',
+                            drop: this.handleTileDrop.bind(this)
+                        });
+
+                    board.append(square);
+                });
+            }
+
+            handleTileDrop(event, ui) {
+                const droppedTile = $(ui.draggable);
+                const targetSquare = $(event.target);
+
+                // Check if a square on the board is empty.
+                if (targetSquare.children('.tile').length === 0) {
+                    // Moves the tile to Scrabble board location.
+                    droppedTile.detach().css({
+                        'position': 'absolute',
+                        'top': '0',
+                        'left': '0',
+                        'right': '0',
+                        'bottom': '0',
+                        'z-index': 20
+                    }).appendTo(targetSquare);
+                    return true;
+                }
+                return false;
+            }
+
+            setupDragAndDrop() {
+                // Make the tiles draggable from both the rack and Scrabble board.
+                $('.tile').draggable({
+                    revert: 'invalid',
+                    containment: 'document',
+                    cursor: 'move',
+                    start: function() {
+                        $(this).css('z-index', 100);
+                    },
+                    stop: function() {
+                        $(this).css('z-index', 10);
+                    }
+                });
+
+                // Makes the rack droppable to be able to receive tiles from the board.
+                $('#rack').droppable({
+                    accept: '.tile',
+                    drop: (event, ui) => {
+                        const droppedTile = $(ui.draggable);
+                        const rack = $(event.target);
+
+                        // Remove respective tile from board square and restore to rack.
+                        droppedTile.detach().css({
+                            'position': 'static',
+                            'top': 'auto',
+                            'left': 'auto',
+                            'right': 'auto',
+                            'bottom': 'auto',
+                            'z-index': 10
+                        }).appendTo(rack);
+                        return true;
+                    }
+                });
+
+                // Board squares remain droppable as it was prior.
+                $('.board-square').droppable({
+                    accept: '.tile',
+                    drop: this.handleTileDrop.bind(this)
+                });
+            }
+
+            setupButtonHandlers() {
+                $('#submit-word').on('click', this.calculateWordScore.bind(this));
+                $('#restart-game').on('click', this.restartGame.bind(this));
+            }
+
+            calculateWordScore() {
+                // Clears any previous error message(s).
+                $('#error-message').text('');
+
+                // Checks if the tiles are contiguous (no spaces).
+                const boardSquares = $('#scrabble-board .board-square');
+                let hasTiles = false;
+                let hasBlankSpace = false;
+
+                boardSquares.each(function() {
+                    const tile = $(this).find('.tile');
+                    
+                    if (tile.length) {
+                        hasTiles = true;
+                        // If the tiles are not contiguous, it gives an error.
+                        if (hasBlankSpace) {
+                            $('#error-message').text('Tiles must be placed contiguously without spaces!');
+                            return false; // Breaks out of the each loop.
+                        }
+                    } else if (hasTiles) {
+                        // Found a tile before and now it's on a blank space.
+                        hasBlankSpace = true;
+                    }
+                });
+
+                // If error message was set, stop processing.
+                if ($('#error-message').text()) {
+                    return;
+                }
+
+                // Checks for a minimum word length of 2.
+                const playedTiles = boardSquares.find('.tile');
+                if (playedTiles.length < 2) {
+                    $('#error-message').text('Word must be at least 2 letters long!');
+                    return;
+                }
+
+                let wordScore = 0;
+                const tilesPlayed = [];
+                let wordMultiplier = 1;
+
+                boardSquares.each(function() {
+                    const tile = $(this).find('.tile');
+                    if (tile.length) {
+                        const letter = tile.data('letter');
+                        const squareType = $(this).attr('class').split(' ')[1];
+                        
+                        let letterScore = LETTER_DISTRIBUTION[letter].points;
+                        
+                        // Applies the special tile effects, like double letter/word.
+                        if (squareType === 'double-letter') {
+                            letterScore *= 2;
+                        } else if (squareType === 'double-word') {
+                            wordMultiplier *= 2;
+                        }
+                        
+                        tilesPlayed.push(tile);
+                        wordScore += letterScore;
+                    }
+                });
+
+                // If tiles are played, then:
+                if (tilesPlayed.length > 0) {
+                    // Apply any word multiplier(s) to the score.
+                    wordScore *= wordMultiplier;
+
+                    this.score += wordScore;
+                    $('#current-score').text(this.score);
+
+                    // Removes the played tiles completely.
+                    tilesPlayed.forEach(tile => tile.remove());
+
+                    // Draws new tiles to replace what was played.
+                    const newTiles = this.drawTiles(tilesPlayed.length);
+                    const rack = $('#rack');
+                    newTiles.forEach(letter => this.createTile(letter, rack));
+
+                    // Resets board.
+                    this.createBoardRow();
+                    this.setupDragAndDrop();
+                }
+            }
+
+	    // Restarts the entire game.
+            restartGame() {
+                this.score = 0;
+                $('#current-score').text(this.score);
+                $('#error-message').text('');
+                this.letterBag = this.initializeLetterBag();
+                $('#tile-count').text(this.letterBag.length);
+                this.initializeGame();
+            }
+        }
+
+        // Initialize game when the page loads.
+        $(document).ready(function() {
+            new ScrabbleGame();
+        });
+    </script>
+</body>
+</html>
